@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RevenueOS - Brief to POC</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#14181f;--mute:#667085;--line:#e3e6ec;--green:#12805c;--amber:#b7791f;--red:#c0362c;--accent:#1f4fd8}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1218;--card:#171b24;--ink:#e8ebf2;--mute:#97a0b3;--line:#262c39;--green:#3ec28f;--amber:#e0a84a;--red:#ef6b61;--accent:#6c8cff}}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif}
+  header{display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line)}
+  h1{font-size:16px;margin:0}.pill{padding:3px 10px;border-radius:99px;color:#fff;font-weight:600;text-transform:uppercase;font-size:12px}
+  .green{background:var(--green)}.amber{background:var(--amber)}.red{background:var(--red)}
+  .stat{color:var(--mute)}.stat b{color:var(--ink)}
+  main{display:grid;grid-template-columns:300px minmax(0,1fr) 340px;gap:16px;padding:16px 20px;align-items:start}
+  @media (max-width:1100px){main{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:0 0 8px}
+  .brief{padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer}
+  .brief.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .brief .row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .mute{color:var(--mute)}.small{font-size:12px}
+  label{display:block;font-size:12px;color:var(--mute);margin:10px 0 3px}
+  textarea,input[type=text]{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+  textarea{min-height:64px;resize:vertical}
+  .cand{padding:8px;border:1px dashed var(--line);border-radius:8px;margin-bottom:6px}
+  .tpl{display:flex;gap:8px;align-items:center;margin-bottom:6px}.tpl input[type=text]{flex:1}
+  .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  button{font:inherit;padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button.danger{color:var(--red);border-color:var(--red)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .miss{color:var(--amber)}.ev{font-size:12px;border-bottom:1px solid var(--line);padding:4px 0}
+  .trig{border-left:3px solid var(--red);padding:6px 8px;margin-bottom:8px;background:var(--bg);border-radius:4px}
+  ul{margin:4px 0 0 18px;padding:0}
+</style>
+</head>
+<body>
+<header>
+  <h1>RevenueOS &middot; Sales &rarr; PreSales seam (US)</h1>
+  <span id="seam" class="pill green">green</span>
+  <span class="stat" id="counts"></span>
+  <span class="stat" id="oldest"></span>
+  <span class="stat" id="reuse"></span>
+  <span class="stat mute small">SLA 2 business days &middot; US baseline: 6.8 d, reuse 21% (UK 58%, India 55%)</span>
+</header>
+<main>
+  <section class="card"><h2>Brief queue</h2><div id="queue"></div>
+    <h2 style="margin-top:14px">Demo controls (synthetic)</h2>
+    <div class="actions"><button id="adv">Advance +1 business day</button><button id="inj">Inject brief</button><button id="rst" class="danger">Reset</button></div>
+  </section>
+  <section class="card" id="draft"><div class="mute">Select a brief.</div></section>
+  <aside>
+    <div class="card"><h2>Trigger log</h2><div id="triggers"></div></div>
+    <div class="card" style="margin-top:16px"><h2>Recent OS events</h2><div id="events"></div></div>
+  </aside>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let S = null, sel = null, drawnKey = null;
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} :
+    {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function refresh() { S = await api('/api/state'); render(); }
+
+function render() {
+  const s = S.seam;
+  $('#seam').className = 'pill ' + s.health; $('#seam').textContent = s.health;
+  $('#counts').innerHTML = `open <b>${s.open}</b> &middot; <span style="color:var(--green)">${s.green} green</span> &middot; <span style="color:var(--amber)">${s.amber} amber</span> &middot; <span style="color:var(--red)">${s.red} red</span>`;
+  $('#oldest').innerHTML = `oldest <b>${s.oldest_age_days} d</b>`;
+  const r = S.reuse;
+  $('#reuse').innerHTML = `reuse <b>${Math.round(r.rate*100)}%</b> (${r.reused}/${r.decisions}) &middot; cross-region <b>${Math.round(r.cross_region_rate*100)}%</b> &middot; rejections <b>${r.rejections}</b>`;
+  if (!sel && S.briefs.length) sel = S.briefs[0].brief_id;
+  $('#queue').innerHTML = S.briefs.map(b => `
+    <div class="brief ${b.brief_id===sel?'sel':''}" data-id="${esc(b.brief_id)}">
+      <div class="row"><b>${esc(b.account)}</b><span class="pill ${b.health}">${b.age_days} d</span></div>
+      <div class="small mute">${esc(b.brief.segment)} &middot; ${esc(b.brief.regulator)} &middot; ${esc(b.status.replace('_',' '))}</div>
+    </div>`).join('') || '<div class="mute">No briefs.</div>';
+  document.querySelectorAll('.brief').forEach(el => el.onclick = () => { sel = el.dataset.id; drawnKey = null; render(); });
+  $('#triggers').innerHTML = S.triggers.map(t => `
+    <div class="trig"><b>${esc(t.account)}</b> &rarr; ${esc(t.recipient)} (${esc(t.role)})<div class="small">${esc(t.message)}</div>
+    <div class="small mute">${esc(t.channel)} &middot; delivery: ${esc(t.delivery)} &middot; draft #${esc(t.draft_event_id)}</div></div>`).join('') || '<div class="mute">No triggers fired.</div>';
+  $('#events').innerHTML = S.events.slice(0, 14).map(e => `<div class="ev"><b>${esc(e.type)}</b> <span class="mute">${esc(e.account)}</span></div>`).join('');
+  const b = S.briefs.find(x => x.brief_id === sel);
+  const key = b ? `${b.brief_id}:${b.draft_event_id}:${b.status}` : 'none';
+  if (key !== drawnKey) { drawnKey = key; renderDraft(b); }
+}
+
+const lines = a => (a || []).join('\n');
+const parseLines = id => $(id).value.split('\n').map(x => x.trim()).filter(Boolean);
+
+function renderDraft(b) {
+  const el = $('#draft');
+  if (!b) { el.innerHTML = '<div class="mute">Select a brief.</div>'; return; }
+  if (!b.draft) { el.innerHTML = `<h2>${esc(b.account)}</h2><div class="mute">Agent is drafting...</div>`; return; }
+  const d = b.draft, p = d.plan, h = d.handoff, done = b.status === 'picked_up', dis = done ? 'disabled' : '';
+  el.innerHTML = `
+    <h2>Draft for ${esc(b.account)} &middot; ${esc(d.mode)}${d.edited ? ' &middot; edited by architect' : ''}${d.model ? ' (' + esc(d.model) + ')' : ' drafter'}</h2>
+    <div class="small mute">${esc(b.brief.problem)}</div>
+    <label>Candidate templates and why they matched</label>
+    ${d.candidates.map(c => `<div class="cand"><b>${esc(c.name)}</b> <span class="mute small">${esc(c.template_id)} &middot; ${esc(c.region)} &middot; score ${c.score}</span>
+      <ul class="small">${c.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>`).join('')}
+    <label>Templates drawn on (untick to drop; edit what changes)</label>
+    <div id="tpls">${p.templates_drawn_on.map(u => `<div class="tpl" data-id="${esc(u.template_id)}"><input type="checkbox" checked ${dis}><b>${esc(u.template_id)}</b><input type="text" value="${esc(u.what_changes)}" ${dis}></div>`).join('')}</div>
+    <label>Objective</label><textarea id="p-objective" ${dis}>${esc(p.objective)}</textarea>
+    <label>Success criteria (one per line)</label><textarea id="p-success" ${dis}>${esc(lines(p.success_criteria))}</textarea>
+    <label>Scope in</label><textarea id="p-in" ${dis}>${esc(lines(p.scope_in))}</textarea>
+    <label>Scope out</label><textarea id="p-out" ${dis}>${esc(lines(p.scope_out))}</textarea>
+    <label>Integrations</label><textarea id="p-int" ${dis}>${esc(lines(p.integrations))}</textarea>
+    <label>Week by week (one line per week: focus :: activity; activity)</label>
+    <textarea id="p-weeks" style="min-height:150px" ${dis}>${esc(p.week_by_week.map(w => w.focus + ' :: ' + w.activities.join('; ')).join('\n'))}</textarea>
+    <label>Risks</label><textarea id="p-risks" ${dis}>${esc(lines(p.risks))}</textarea>
+    <label>People needed</label><textarea id="p-people" ${dis}>${esc(lines(p.people_needed))}</textarea>
+    <h2 style="margin-top:18px">Delivery handoff skeleton</h2>
+    <div class="small"><b>Customer:</b> ${esc(h.customer)} &middot; <b>Regulatory:</b> ${esc(h.regulatory_context)} &middot; <b>Systems:</b> ${esc(h.systems.join(', '))}</div>
+    <label>Commitments</label><ul class="small">${h.commitments.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <label class="miss">Missing from Sales (ask before signing)</label><ul class="small miss">${h.missing_from_sales.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <label>Open questions</label><ul class="small">${h.open_questions.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <label>Delivery prerequisites</label><ul class="small">${h.delivery_prerequisites.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <div class="actions">
+      ${done ? `<span class="mute">Decision recorded. Seam clock stopped at ${b.age_days} business days.</span>` : `
+      <button class="primary" id="accept">Accept as drafted</button>
+      <button id="edit">Save edits &amp; accept</button>
+      <button class="danger" id="reject">Reject &amp; redraft</button>`}
+      <button id="copy">Copy as Markdown</button>
+    </div>
+    <div id="err" class="small" style="color:var(--red);margin-top:8px"></div>`;
+  if (!done) {
+    $('#accept').onclick = () => decide(b, {action: 'accept', draft_event_id: b.draft_event_id});
+    $('#edit').onclick = () => decide(b, {action: 'edit', plan: collectPlan(), draft_event_id: b.draft_event_id});
+    $('#reject').onclick = () => {
+      const reason = prompt('Why reject? (the agent redrafts with new ranking)') ;
+      if (reason !== null) decide(b, {action: 'reject', reason, draft_event_id: b.draft_event_id});
+    };
+  }
+  $('#copy').onclick = () => navigator.clipboard.writeText(toMarkdown(b, collectPlan()));
+}
+
+function collectPlan() {
+  const weeks = parseLines('#p-weeks').map((l, i) => {
+    const [focus, acts = ''] = l.split('::');
+    return {week: i + 1, focus: focus.trim(), activities: acts.split(';').map(x => x.trim()).filter(Boolean)};
+  });
+  const tpls = [...document.querySelectorAll('#tpls .tpl')].filter(r => r.querySelector('input[type=checkbox]').checked)
+    .map(r => ({template_id: r.dataset.id, what_changes: r.querySelector('input[type=text]').value}));
+  return {objective: $('#p-objective').value.trim(), success_criteria: parseLines('#p-success'),
+    scope_in: parseLines('#p-in'), scope_out: parseLines('#p-out'), templates_drawn_on: tpls,
+    integrations: parseLines('#p-int'), week_by_week: weeks, risks: parseLines('#p-risks'),
+    people_needed: parseLines('#p-people')};
+}
+
+function toMarkdown(b, p) {
+  const h = b.draft.handoff, ul = a => a.map(x => `- ${x}`).join('\n');
+  return `# POC plan: ${b.account}\n\n**Objective:** ${p.objective}\n\n## Success criteria\n${ul(p.success_criteria)}\n\n## Scope in\n${ul(p.scope_in)}\n\n## Scope out\n${ul(p.scope_out)}\n\n## Templates drawn on\n${ul(p.templates_drawn_on.map(u => `${u.template_id}: ${u.what_changes}`))}\n\n## Integrations\n${ul(p.integrations)}\n\n## Plan\n${p.week_by_week.map(w => `**Week ${w.week}: ${w.focus}**\n${ul(w.activities)}`).join('\n\n')}\n\n## Risks\n${ul(p.risks)}\n\n## People\n${ul(p.people_needed)}\n\n# Delivery handoff\n**Customer:** ${h.customer}\n**Regulatory:** ${h.regulatory_context}\n\n## Commitments\n${ul(h.commitments)}\n\n## Missing from Sales\n${ul(h.missing_from_sales)}\n\n## Open questions\n${ul(h.open_questions)}\n\n## Delivery prerequisites\n${ul(h.delivery_prerequisites)}\n`;
+}
+
+async function decide(b, body) {
+  try { S = await api(`/api/briefs/${encodeURIComponent(b.brief_id)}/decision`, body); drawnKey = null; render(); }
+  catch (e) { $('#err').textContent = e.message; }
+}
+// Hours to send so exactly one business day (24h of Mon-Fri time) elapses from the server's `now`,
+// skipping Sat/Sun wall-clock days. Plus a 1-minute margin so float rounding can't land just under a threshold.
+function hoursForBusinessDay(nowIso) {
+  const m = nowIso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?/);
+  if (!m) return 24;
+  const start = Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6], Math.round(parseFloat(m[7] || 0) * 1000));
+  const DAY = 86400000;
+  let cur = start, remaining = DAY;
+  while (remaining > 0) {
+    const nextMidnight = Math.floor(cur / DAY) * DAY + DAY;
+    const dow = new Date(cur).getUTCDay();
+    if (dow === 0 || dow === 6) { cur = nextMidnight; continue; }
+    const take = Math.min(remaining, nextMidnight - cur);
+    cur += take; remaining -= take;
+  }
+  return (cur - start) / 3600000 + 1 / 60;
+}
+$('#adv').onclick = async () => {
+  try {
+    S = await api('/api/clock/advance', {hours: hoursForBusinessDay(S ? S.now : '')});
+    drawnKey = null; render();
+  } catch (e) { alert(e.message); }
+};
+$('#inj').onclick = async () => { const r = await api('/api/demo/inject', {}); sel = r.brief_id; await refresh(); };
+$('#rst').onclick = async () => { sel = null; drawnKey = null; S = await api('/api/demo/reset', {}); render(); };
+refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>
