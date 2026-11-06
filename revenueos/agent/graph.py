@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -32,12 +32,12 @@ class AgentState(TypedDict, total=False):
     account: str
     brief: dict
     candidates: list
-    plan: dict | None
-    handoff: dict | None
+    plan: Optional[dict]
+    handoff: Optional[dict]
     mode: str
-    model: str | None
+    model: Optional[str]
     attempts: int
-    error: str | None
+    error: Optional[str]
     decision: dict
     draft_event_id: int
     reject_reason: str

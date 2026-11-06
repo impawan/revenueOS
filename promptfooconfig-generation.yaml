@@ -1,0 +1,47 @@
+description: "RevenueOS RAG End-to-End Generation & Grounding Evaluation"
+
+prompts:
+  - "Generate grounded POC plan and Delivery handoff for {{brief.account}}"
+
+providers:
+  - id: "python:evals/agent_rag_provider.py"
+    label: "POC-Plan-RAG-Generator"
+
+tests:
+  - description: "E2E RAG Plan: Meridian Mutual"
+    vars:
+      brief:
+        account: "Meridian Mutual"
+        region: "US"
+        segment: "insurer"
+        regulator: "NAIC"
+        problem: "Adjusters spend hours reading first-notice-of-loss emails, photos and police reports to classify auto and property claims and decide severity. Simple claims queue behind complex ones and cycle time keeps growing."
+        systems: ["Guidewire ClaimCenter", "Salesforce"]
+        timeline: "POC live in 10 weeks, pilot with 2 claims teams"
+        success: "Auto-classify 60% of new claims and route severity correctly with adjuster sign-off"
+    assert:
+      - type: python
+        value: "file://evals/generation_metrics.py"
+      - type: icontains
+        value: "Guidewire"
+      - type: icontains
+        value: "Meridian Mutual"
+
+  - description: "E2E RAG Plan: Atlas Credit"
+    vars:
+      brief:
+        account: "Atlas Credit"
+        region: "US"
+        segment: "lender"
+        regulator: "CFPB"
+        problem: "Underwriters assemble credit memos by hand from pay stubs, bank statements and bureau reports, then check each loan against policy. Memo preparation delays decisions on small-business loans."
+        systems: ["nCino", "Equifax", "Encompass"]
+        timeline: "POC in 8 weeks before the summer lending peak"
+        success: "Reduce memo preparation time by 35% and explain every policy check to the underwriter"
+    assert:
+      - type: python
+        value: "file://evals/generation_metrics.py"
+      - type: icontains
+        value: "nCino"
+      - type: icontains
+        value: "Atlas Credit"

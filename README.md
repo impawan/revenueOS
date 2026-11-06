@@ -30,6 +30,34 @@ pytest
 
 Covers Tasks 0-6 only; see Status.
 
+## Evaluate RAG with Promptfoo
+
+RevenueOS includes an evaluation pipeline using [promptfoo](https://promptfoo.dev/) to benchmark both retrieval precision and draft generation/grounding quality across enterprise briefs.
+
+### 1. Run All Evals
+```bash
+./evals/run_evals.sh
+```
+
+### 2. Run Specific Suites
+- **Retrieval Precision & Explainability**: Evaluates top-1 accuracy, top-$k$ presence, and match reasons:
+  ```bash
+  ./evals/run_evals.sh retrieval
+  # or directly:
+  promptfoo eval -c promptfooconfig-retrieval.yaml
+  ```
+- **Generation & Anti-Hallucination**: Evaluates grounding (ensuring cited templates exist in retrieved candidates), delivery handoff completeness, and system integration coverage:
+  ```bash
+  ./evals/run_evals.sh generation
+  # or directly:
+  promptfoo eval -c promptfooconfig-generation.yaml
+  ```
+
+### 3. View Interactive Web UI
+```bash
+promptfoo view
+```
+
 ## Stack and why
 
 Python, FastAPI and SQLite keep the whole thing one process and one file, which suits an 8-hour build and an event log that must be inspectable. LangGraph is used only for the agent flow, because its `interrupt` gives a real human gate between draft and decision. There is no vector database: the library is 12 templates, and explainable ranking (BM25 plus filters plus a learned boost, each with machine-built match reasons) matters more than semantic recall. SLA age, thresholds, triggers and ranking updates are plain Python because seam health is computed from events, not reported by an agent. Only draft generation calls an LLM (Claude via the Anthropic SDK, forced `submit_draft` tool call, Pydantic-validated, deterministic fallback).
